@@ -12,10 +12,64 @@ fn main(
   nullifier: pub [u8; 32],
 ) {
   // Write your main logic here
+
+  // 1 - recover signer's address from signature, hashed_message, public_key
+
+  // 1 --- ecrecover::ecrecover approach (need pub_key_x, pub_key_y)
+  let (key_x, key_y) = split_u8_64(pub_key);
+  let address = ecrecover::ecrecover(key_x, key_y, signature, hashed_message);
+
+  // // 1 --- hashed pub key approach
+  // let addr = address_from_public_key(pub_key);
+
+  // // 1 --- ecrecover::secp256k1 approach
+  // let key = ecrecover::secp256k1::PubKey::from_unified(pub_key);
+  // let address = key.ecrecover(signature, hashed_message);
+
+  // 2 - check polynomial commitment is same as polynomial hash
+  // what is polynomial_hash[1]?
+  let calc_poly_hash = std::hash::pedersen(polynomial)[0];
+  assert(calc_poly_hash == polynomial_commitment);
+
+  // 3 - check address is in polynomial i.e evaluation of polynomial at address is 0
+  let evaluation = evaluate_polynomial(polynomial, address);
+  assert(evaluation == 0);
+
+  // 4 - check nullifier is valid
+  let calc_sign_hash = std::hash::blake2s(signature);
+  assert(calc_sign_hash == nullifier);
 }
 
 fn evaluate_polynomial(polynomial: [Field; CANDIDATES + 1], x: Field) -> Field {
   // Write logic to evaluate polynomial here
+  // polynomial[0] * x * x + polynomial[1] * x + polynomial[2]
+  polynomial[2] * x * x + polynomial[1] * x + polynomial[0]
+}
+
+// helper methods (from zkcamp repo)
+fn address_from_public_key(pub_key: [u8; 64]) -> Field {
+    let hashed_pub_key = std::hash::keccak256(pub_key, 64);
+
+    let mut addr: Field = 0;
+    for i in 0..20 {
+        addr = (addr * 256) + hashed_pub_key[i + 12] as Field;
+    }
+
+    addr
+}
+
+fn split_u8_64(
+    arr: [u8; 64]
+) -> ([u8; 32], [u8; 32]) {
+    let mut arr_a: [u8; 32] = [0; 32];
+    let mut arr_b: [u8; 32] = [0; 32];
+
+    for i in 0..32 {
+        arr_a[i] = arr[i];
+        arr_b[i] = arr[i + 32];
+    };
+
+    (arr_a, arr_b)
 }
 
 #[test]
@@ -36,4 +90,3 @@ fn test_main() {
 
   main(pub_key, signature, hashed_message, polynomial, polynomial_commitment, nullifier);
 }
-
